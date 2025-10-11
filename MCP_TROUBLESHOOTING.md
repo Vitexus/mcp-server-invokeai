@@ -3,7 +3,7 @@
 ## Current Status: ✅ RESOLVED - SERVER NOW WORKING
 
 ### What We Built
-1. **MCP Server**: `/home/cdm/invokeai-cmp/invokeai_mcp_server.py`
+1. **MCP Server**: `invokeai_mcp_server.py`
    - Server initializes correctly when tested directly
    - Provides tools: `generate_image`, `list_models`, `get_queue_status`
    - Successfully generates images when tested standalone
@@ -46,7 +46,7 @@ Expected output:
 Checking MCP server health...
 
 plugin:testing-suite:playwright-server: npx @playwright/mcp@latest - ✓ Connected
-invokeai: /home/cdm/invokeai-cmp/venv/bin/python /home/cdm/invokeai-cmp/invokeai_mcp_server.py - ✓ Connected
+invokeai: /path/to/invokeai-mcp-server/venv/bin/python /path/to/invokeai-mcp-server/invokeai_mcp_server.py - ✓ Connected
 ```
 
 ### Using the Server
@@ -74,7 +74,7 @@ The server won't be available in existing conversations. Once restarted, Claude 
 3. **Testing the Server**
    - Test server initialization manually:
      ```bash
-     echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}' | /home/cdm/invokeai-cmp/venv/bin/python /home/cdm/invokeai-cmp/invokeai_mcp_server.py
+     echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}' | /path/to/invokeai-mcp-server/venv/bin/python /path/to/invokeai-mcp-server/invokeai_mcp_server.py
      ```
    - Check registration: `claude mcp list`
    - Verify health: Look for `✓ Connected` status
@@ -86,8 +86,8 @@ The server won't be available in existing conversations. Once restarted, Claude 
 
 ## Environment Details
 - OS: Linux (WSL2)
-- Working Directory: `/home/cdm/invokeai-cmp`
-- Python: venv at `/home/cdm/invokeai-cmp/venv`
+- Working Directory: `invokeai-mcp-server/`
+- Python: Virtual environment in `venv/`
 - InvokeAI: Running on `http://127.0.0.1:9090`
 - Config: `~/.claude.json` (user scope)
 
@@ -103,7 +103,7 @@ The server won't be available in existing conversations. Once restarted, Claude 
 
 ### To Add the Server (if needed again):
 ```bash
-claude mcp add --scope user invokeai /home/cdm/invokeai-cmp/venv/bin/python /home/cdm/invokeai-cmp/invokeai_mcp_server.py
+claude mcp add --scope user invokeai /path/to/invokeai-mcp-server/venv/bin/python /path/to/invokeai-mcp-server/invokeai_mcp_server.py
 ```
 
 ### To Check Server Status:
@@ -118,6 +118,6 @@ claude mcp remove invokeai
 
 ### Server Configuration:
 - **Name**: invokeai
-- **Python**: `/home/cdm/invokeai-cmp/venv/bin/python`
-- **Script**: `/home/cdm/invokeai-cmp/invokeai_mcp_server.py`
+- **Python**: `/path/to/invokeai-mcp-server/venv/bin/python`
+- **Script**: `/path/to/invokeai-mcp-server/invokeai_mcp_server.py`
 - **InvokeAI Backend**: `http://127.0.0.1:9090`

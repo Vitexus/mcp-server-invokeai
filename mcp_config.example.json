@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "invokeai": {
-      "command": "/home/cdm/invokeai-cmp/venv/bin/python",
-      "args": ["/home/cdm/invokeai-cmp/invokeai_mcp_server.py"]
-    }
-  }
-}
