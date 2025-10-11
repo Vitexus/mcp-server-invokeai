@@ -1,265 +1,299 @@
 # InvokeAI MCP Server
 
-An MCP (Model Context Protocol) server that provides text-to-image generation capabilities using a local InvokeAI instance.
+A [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server that integrates InvokeAI with Claude Code, enabling AI-powered image generation, transformation, and upscaling directly from your AI assistant.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+## Overview
+
+This MCP server provides a seamless bridge between Claude Code and your local InvokeAI instance, enabling powerful image generation workflows without leaving your development environment. Perfect for creating logos, icons, illustrations, and other visual assets for your projects.
 
 ## Features
 
-- **Text-to-Image Generation**: Generate images from text prompts
-- **Image-to-Image (img2img)**: Transform existing images with prompts - perfect for refining designs and creating variations
-- **AI Upscaling**: Enhance images to higher resolution (2x-4x) using Spandrel models (SwinIR, RealESRGAN, etc.)
-- **Model Selection**: Choose from available models (SD 1.5, SDXL, and more)
-- **Customizable Parameters**: Control width, height, steps, CFG scale, scheduler, and seed
-- **Queue Status**: Check the status of the InvokeAI processing queue
+- **Text-to-Image Generation**: Create images from natural language descriptions
+- **Image-to-Image Transformation**: Refine, modify, or stylize existing images
+- **AI-Powered Upscaling**: Enhance images to higher resolutions (2x-4x) using state-of-the-art Spandrel models
+- **Flexible Model Support**: Compatible with Stable Diffusion 1.5, SDXL, and custom fine-tuned models
+- **Comprehensive Parameter Control**: Fine-tune generation with width, height, steps, CFG scale, schedulers, and seeds
+- **Queue Management**: Monitor and track InvokeAI processing status
+
+## Prerequisites
+
+- **InvokeAI**: A running instance (v4.0+) accessible at `http://127.0.0.1:9090` (or custom URL)
+- **Claude Code**: Anthropic's Claude CLI tool installed and configured
+- **Python**: Version 3.8 or higher
+- **Hardware**: GPU with sufficient VRAM for your chosen models (see [Model Requirements](#model-requirements))
 
 ## Installation
 
-### Quick Setup (Recommended)
+### Quick Setup
 
-1. Clone this repository:
 ```bash
-git clone <repository-url>
+# Clone the repository
+git clone https://github.com/coinstax/invokeai-mcp-server.git
 cd invokeai-mcp-server
-```
 
-2. Install python3-venv if needed (Linux/WSL):
-```bash
-sudo apt install python3-venv
-```
-
-3. Run the setup script:
-```bash
+# Run the automated setup script
 ./setup.sh
 ```
 
 ### Manual Setup
 
-1. Clone this repository:
 ```bash
-git clone <repository-url>
+# Clone the repository
+git clone https://github.com/coinstax/invokeai-mcp-server.git
 cd invokeai-mcp-server
-```
 
-2. Install python3-venv (if not already installed):
-```bash
-sudo apt install python3-venv  # Linux/WSL
-# macOS: python3-venv is included with Python
-```
-
-3. Create and activate a virtual environment:
-```bash
+# Create and activate virtual environment
 python3 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
 
-4. Install dependencies:
-```bash
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-5. Make sure your InvokeAI instance is running at `http://127.0.0.1:9090`
+## Configuration
 
-## Configuration for Claude Code
+### Register with Claude Code
 
-### Adding the MCP Server
+Use the Claude CLI to register the MCP server:
 
-Use the Claude CLI command to register the server (recommended):
-
+**Linux/WSL/macOS:**
 ```bash
-claude mcp add --scope user invokeai /path/to/invokeai-mcp-server/venv/bin/python /path/to/invokeai-mcp-server/invokeai_mcp_server.py
+claude mcp add --scope user invokeai \
+  ~/invokeai-mcp-server/venv/bin/python \
+  ~/invokeai-mcp-server/invokeai_mcp_server.py
 ```
 
-**Parameters:**
-- `--scope user`: Makes the server available across all projects
-- `invokeai`: The server name
-- First path: Path to your virtual environment Python interpreter
-- Second path: Path to the server script
-
-**Example for Linux/WSL:**
+**Windows:**
 ```bash
-claude mcp add --scope user invokeai ~/invokeai-mcp-server/venv/bin/python ~/invokeai-mcp-server/invokeai_mcp_server.py
+claude mcp add --scope user invokeai ^
+  C:\path\to\invokeai-mcp-server\venv\Scripts\python.exe ^
+  C:\path\to\invokeai-mcp-server\invokeai_mcp_server.py
 ```
 
-**Example for macOS:**
-```bash
-claude mcp add --scope user invokeai ~/invokeai-mcp-server/venv/bin/python ~/invokeai-mcp-server/invokeai_mcp_server.py
-```
-
-**Example for Windows:**
-```bash
-claude mcp add --scope user invokeai C:\Users\YourName\invokeai-mcp-server\venv\Scripts\python.exe C:\Users\YourName\invokeai-mcp-server\invokeai_mcp_server.py
-```
-
-### Verifying the Installation
-
-Check that the server is registered and connected:
+### Verify Installation
 
 ```bash
 claude mcp list
 ```
 
-You should see:
+Expected output:
 ```
 invokeai: /path/to/invokeai-mcp-server/venv/bin/python /path/to/invokeai-mcp-server/invokeai_mcp_server.py - ✓ Connected
 ```
 
-### Important Notes
-
-- **Always use the CLI command** rather than manually editing config files
-- The server will be registered in `~/.claude.json` (user scope)
-- After registration, restart Claude Code or start a new conversation to access the tools
-- The command should point to the Python interpreter in your virtual environment
+After registration, restart Claude Code or start a new conversation to access the tools.
 
 ## Usage
 
-Once configured, you can use the following tools in Claude Code:
+### Available Tools
 
-### generate_image
-
-Generate an image from a text prompt.
+#### `generate_image`
+Generate images from text prompts.
 
 **Parameters:**
-- `prompt` (required): Text description of the image to generate
-- `negative_prompt` (optional): Things to avoid in the image
-- `width` (optional, default: 512): Image width in pixels (64-2048)
-- `height` (optional, default: 512): Image height in pixels (64-2048)
-- `steps` (optional, default: 30): Number of denoising steps (1-150)
-- `cfg_scale` (optional, default: 7.5): Classifier-free guidance scale (1.0-20.0)
-- `scheduler` (optional, default: "euler"): Sampling scheduler
-- `seed` (optional): Random seed for reproducibility
-- `model_key` (optional): Model identifier
+- `prompt` (string, required): Description of the image to generate
+- `negative_prompt` (string, optional): Elements to avoid in the generation
+- `width` (integer, optional, default: 512): Image width (64-2048px)
+- `height` (integer, optional, default: 512): Image height (64-2048px)
+- `steps` (integer, optional, default: 30): Denoising steps (1-150)
+- `cfg_scale` (float, optional, default: 7.5): Guidance scale (1.0-20.0)
+- `scheduler` (string, optional, default: "euler"): Sampling scheduler
+- `seed` (integer, optional): Random seed for reproducibility
+- `model_key` (string, optional): Specific model identifier
 
 **Example:**
 ```
-Generate an image of a sunset over mountains
+Generate a minimalist tech logo with blue and white colors, geometric shapes, flat design
 ```
 
-### list_models
+#### `img2img`
+Transform existing images using text guidance.
 
+**Parameters:**
+- `image_path` (string, required): Path to source image or `image_name` from previous generation
+- `prompt` (string, required): Description of desired transformation
+- `negative_prompt` (string, optional): Elements to avoid
+- `strength` (float, optional, default: 0.75): Transformation strength (0.0-1.0)
+- `steps` (integer, optional, default: 30): Denoising steps (1-150)
+- `cfg_scale` (float, optional, default: 7.5): Guidance scale (1.0-20.0)
+- `scheduler` (string, optional, default: "euler"): Sampling scheduler
+- `seed` (integer, optional): Random seed for reproducibility
+- `model_key` (string, optional): Specific model identifier
+
+**Example:**
+```
+Refine this logo with strength 0.6: /path/to/sketch.png
+Prompt: professional polished logo, clean lines, modern aesthetic
+```
+
+#### `upscale_image`
+Enhance image resolution using AI upscaling.
+
+**Parameters:**
+- `image_path` (string, required): Path to image or `image_name` from previous generation
+- `model_key` (string, optional): Specific upscaling model (auto-selects if omitted)
+
+**Example:**
+```
+Upscale this image to high resolution: generated_logo.png
+```
+
+#### `list_models`
 List available models in your InvokeAI instance.
 
 **Parameters:**
-- `model_type` (optional, default: "main"): Type of models to list (main, vae, lora, controlnet, embedding)
-
-### img2img
-
-Transform an existing image using a text prompt (image-to-image generation).
-
-**Parameters:**
-- `image_path` (required): Path to the source image file to transform
-- `prompt` (required): Text description of the desired transformation
-- `negative_prompt` (optional): Things to avoid in the transformation
-- `strength` (optional, default: 0.75): How much to transform (0.0-1.0). Higher = more changes. Typical range: 0.6-0.8
-- `steps` (optional, default: 30): Number of denoising steps (1-150)
-- `cfg_scale` (optional, default: 7.5): Classifier-free guidance scale (1.0-20.0)
-- `scheduler` (optional, default: "euler"): Sampling scheduler
-- `seed` (optional): Random seed for reproducibility
-- `model_key` (optional): Model identifier
+- `model_type` (string, optional, default: "main"): Model type (main, vae, lora, controlnet, embedding, spandrel_image_to_image)
 
 **Example:**
 ```
-Transform this sketch into a polished logo using /path/to/sketch.png
+List all available SDXL models
 ```
 
-### upscale_image
-
-Upscale an image to higher resolution using AI upscaling (typically 2x-4x).
+#### `get_queue_status`
+Check InvokeAI processing queue status.
 
 **Parameters:**
-- `image_path` (required): Path to image file, or image_name from a previous generation
-- `model_name` (optional): Upscaling model to use (uses default if not specified)
+- `queue_id` (string, optional, default: "default"): Queue identifier
 
-**Example:**
+## Model Requirements
+
+### VRAM Requirements
+
+| Model Type | Minimum VRAM | Recommended VRAM | Notes |
+|------------|--------------|------------------|-------|
+| SD 1.5 | 4GB | 6-8GB | Faster generation, good for iteration |
+| SDXL | 8GB | 12GB+ | Higher quality, slower generation |
+| Upscaling (Spandrel) | 4GB | 6GB+ | Depends on source image resolution |
+
+### Recommended Models
+
+#### Base Models
+
+**Stable Diffusion XL (SDXL)**
+- Superior quality for detailed graphics and illustrations
+- Better text rendering capabilities
+- Ideal for final production assets
+- Download from: [Stability AI on HuggingFace](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0)
+
+**Stable Diffusion 1.5**
+- Faster generation for rapid prototyping
+- Lower VRAM requirements
+- Recommended: [Dreamshaper](https://civitai.com/models/4384/dreamshaper), [Realistic Vision](https://civitai.com/models/4201/realistic-vision)
+
+#### Specialized Models (LoRAs)
+
+- **Vector Illustration LoRA** - Clean vector-style graphics
+- **Logo Maker 9000 SDXL** - Purpose-built for logo generation
+- **Flat Design LoRAs** - Modern UI/UX style illustrations
+
+Model repositories:
+- [Civitai](https://civitai.com/) - Community models and LoRAs
+- [HuggingFace](https://huggingface.co/) - Official Stability AI models
+
+> **Note:** FLUX models use a different architecture and may have limited compatibility with InvokeAI's workflow system. For best results, use SD 1.5 or SDXL-based models.
+
+## Workflow Examples
+
+### Logo Design Pipeline
 ```
-Upscale this image: /path/to/image.png
+1. Generate initial concept (512x512, 25 steps)
+2. Refine with img2img (strength 0.6-0.7)
+3. Upscale to high resolution (4x)
+4. Export final asset
 ```
 
-### get_queue_status
-
-Get the status of the InvokeAI processing queue.
-
-**Parameters:**
-- `queue_id` (optional, default: "default"): Queue identifier
-
-## Testing
-
-You can test the server directly:
-
-```bash
-python3 invokeai_mcp_server.py
+### Rapid Prototyping
+```
+1. Generate variations (SD 1.5 for speed)
+2. Select best candidate
+3. Upscale to production resolution
+4. Apply final refinements with img2img
 ```
 
-This will start the server in stdio mode, waiting for MCP protocol messages.
+## Architecture
+
+The server implements a graph-based workflow system that interfaces with InvokeAI's node architecture:
+
+1. **Model Loading** - Initializes selected SD model and VAE
+2. **Prompt Encoding** - Processes positive and negative prompts via CLIP
+3. **Latent Generation** - Creates noise tensors with specified dimensions
+4. **Denoising** - Iteratively refines latents using the diffusion process
+5. **Decoding** - Converts latents to pixel space via VAE
+6. **Output** - Saves final image to InvokeAI's storage
+
+All workflows are automatically constructed and managed by the server based on the requested operation.
 
 ## Troubleshooting
 
-### Server Not Appearing in Claude Code
+### Server Not Connecting
 
-If the server doesn't appear after registration:
-1. Verify registration: `claude mcp list` (should show `✓ Connected`)
-2. Restart Claude Code or start a new conversation
-3. If issues persist, see [MCP_TROUBLESHOOTING.md](./MCP_TROUBLESHOOTING.md)
+**Symptoms:** MCP server doesn't appear in Claude Code tools list
+
+**Solutions:**
+1. Verify InvokeAI is running: `curl http://127.0.0.1:9090/api/v1/app/version`
+2. Check server registration: `claude mcp list`
+3. Restart Claude Code or start a new conversation
+4. Review detailed logs in [MCP_TROUBLESHOOTING.md](./MCP_TROUBLESHOOTING.md)
 
 ### Common Issues
 
-- **InvokeAI not responding**: Make sure InvokeAI is running at `http://127.0.0.1:9090`
-- **No models available**: Check that you have models installed in InvokeAI
-- **Import errors**: Verify Python dependencies are installed: `pip install -r requirements.txt`
-- **Generation fails**: Check the InvokeAI logs for errors
+| Issue | Cause | Solution |
+|-------|-------|----------|
+| Connection refused | InvokeAI not running | Start InvokeAI service |
+| No models available | Models not installed | Install models via InvokeAI Model Manager |
+| Import errors | Missing dependencies | Run `pip install -r requirements.txt` |
+| Generation fails | Insufficient VRAM | Reduce image size or use SD 1.5 |
+| Upscaling fails | No Spandrel models | Install upscaling models in InvokeAI |
 
-### Removing the Server
+### Uninstalling
 
-If you need to unregister the server:
+To remove the MCP server:
 ```bash
 claude mcp remove invokeai
 ```
 
-## Recommended Models for Logo/Website Design
+## Development
 
-For creating logos, icons, and website illustrations, these models work great with InvokeAI:
+### Testing
 
-### Base Models
+Test the server directly:
+```bash
+python3 invokeai_mcp_server.py
+```
 
-**SDXL (Stable Diffusion XL)**
-- Best overall quality for detailed graphics
-- Great for photorealistic and stylized outputs
-- Handles text in images better than SD 1.5
-- Requires at least 8GB VRAM (recommended: 12GB+)
-- Slower but higher quality
+The server will start in stdio mode, waiting for MCP protocol messages.
 
-**Stable Diffusion 1.5 Models**
-- Faster generation than SDXL
-- Lower VRAM usage (works well with 6-8GB VRAM)
-- Models like "Realistic Vision" or "Dreamshaper" work well for professional graphics
-- Good for rapid iteration and prototyping
+### Project Structure
 
-### Specialized LoRA Models (Add-ons)
+```
+invokeai-mcp-server/
+├── invokeai_mcp_server.py    # Main server implementation
+├── requirements.txt           # Python dependencies
+├── setup.sh                   # Automated setup script
+├── README.md                  # Documentation
+├── MCP_TROUBLESHOOTING.md    # Detailed troubleshooting guide
+└── LICENSE                    # MIT License
+```
 
-**For Logos & Icons:**
-- **Vector Illustration LoRA** (Civitai) - Creates clean vector-style graphics
-- **Logo Maker 9000 SDXL** (Civitai) - Specifically trained for logo generation
+## Contributing
 
-**For Flat Design:**
-- Search Civitai for "flat design" or "minimal" LoRAs
-- Many are compatible with both SD 1.5 and SDXL
+Contributions are welcome! Please feel free to submit issues, feature requests, or pull requests.
 
-### Installation
+## License
 
-Download models from:
-- **Civitai**: https://civitai.com/ (community models, LoRAs)
-- **HuggingFace**: https://huggingface.co/ (official Stability AI models)
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-InvokeAI's Model Manager can import models directly from URLs or HuggingFace repo IDs.
+## Acknowledgments
 
-**Note:** FLUX models require different architecture and may not be fully compatible with InvokeAI's current workflow system. Stick with SD 1.5 and SDXL-based models for best results.
+- Built on the [Model Context Protocol](https://modelcontextprotocol.io)
+- Powered by [InvokeAI](https://github.com/invoke-ai/InvokeAI)
+- Integrated with [Claude Code](https://claude.ai/claude-code)
 
-## Architecture
+## Links
 
-The server creates a graph-based workflow for InvokeAI that includes:
-1. Model loading
-2. Text prompt encoding (positive and negative)
-3. Noise generation
-4. Latent denoising (image generation)
-5. Latent-to-image conversion
-6. Image saving
-
-This workflow is automatically managed for you - just provide the prompt and parameters!
+- **Repository**: https://github.com/coinstax/invokeai-mcp-server
+- **InvokeAI**: https://github.com/invoke-ai/InvokeAI
+- **Model Context Protocol**: https://modelcontextprotocol.io
+- **Issues**: https://github.com/coinstax/invokeai-mcp-server/issues
