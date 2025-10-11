@@ -235,7 +235,7 @@ All workflows are automatically constructed and managed by the server based on t
 1. Verify InvokeAI is running: `curl http://127.0.0.1:9090/api/v1/app/version`
 2. Check server registration: `claude mcp list`
 3. Restart Claude Code or start a new conversation
-4. Review detailed logs in [MCP_TROUBLESHOOTING.md](./MCP_TROUBLESHOOTING.md)
+4. Check Python dependencies: `pip install -r requirements.txt`
 
 ### Common Issues
 
@@ -273,7 +273,6 @@ invokeai-mcp-server/
 ├── requirements.txt           # Python dependencies
 ├── setup.sh                   # Automated setup script
 ├── README.md                  # Documentation
-├── MCP_TROUBLESHOOTING.md    # Detailed troubleshooting guide
 └── LICENSE                    # MIT License
 ```
 
