@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test files
+test_*.py
+test_*.json
+*_test.py
+
+# Generated images
+*.png
+*.jpg
+*.jpeg
+!example_*.png
+!example_*.jpg
+
+# Logs
+*.log
+
+# Development notes (keep only finalized docs)
+RESUME.md
+TESTING_*.md
+*_SUMMARY.md
+
+# Claude Code local config
+.claude/
+
+# MCP config (user-specific)
+mcp_config.json
