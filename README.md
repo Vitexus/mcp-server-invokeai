@@ -215,7 +215,7 @@ claude mcp remove invokeai
 
 ## Recommended Models for Logo/Website Design
 
-For creating logos, icons, and website illustrations on your RTX 3090 (24GB VRAM), these models work great with InvokeAI:
+For creating logos, icons, and website illustrations, these models work great with InvokeAI:
 
 ### Base Models
 
@@ -223,12 +223,14 @@ For creating logos, icons, and website illustrations on your RTX 3090 (24GB VRAM
 - Best overall quality for detailed graphics
 - Great for photorealistic and stylized outputs
 - Handles text in images better than SD 1.5
-- Your 3090 can run SDXL comfortably
+- Requires at least 8GB VRAM (recommended: 12GB+)
+- Slower but higher quality
 
 **Stable Diffusion 1.5 Models**
 - Faster generation than SDXL
-- Lower VRAM usage
-- Models like "Realistic Vision" work well for professional graphics
+- Lower VRAM usage (works well with 6-8GB VRAM)
+- Models like "Realistic Vision" or "Dreamshaper" work well for professional graphics
+- Good for rapid iteration and prototyping
 
 ### Specialized LoRA Models (Add-ons)
 
@@ -248,7 +250,7 @@ Download models from:
 
 InvokeAI's Model Manager can import models directly from URLs or HuggingFace repo IDs.
 
-**Note:** The FLUX models you tried earlier (FLUX.1-Krea-dev-nf4) require different architecture and may not be fully compatible with InvokeAI's current workflow system. Stick with SD 1.5 and SDXL-based models for best results.
+**Note:** FLUX models require different architecture and may not be fully compatible with InvokeAI's current workflow system. Stick with SD 1.5 and SDXL-based models for best results.
 
 ## Architecture
 
