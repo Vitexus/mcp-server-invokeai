@@ -1,31 +1,11 @@
-# Smithery configuration for InvokeAI MCP Server
-# https://smithery.ai/docs/build/project-config
-
 build:
-  dockerBuildPath: ./
+  dockerfile: Dockerfile
+  dockerBuildPath: .
 
 startCommand:
   type: stdio
-  configSchema:
-    # JSON Schema defining configuration options
-    type: object
-    properties:
-      invokeaiUrl:
-        type: string
-        description: Base URL for InvokeAI API (default http://127.0.0.1:9090)
-        default: "http://127.0.0.1:9090"
   commandFunction: |-
-    (config) => {
-      const invokeaiUrl = config?.invokeaiUrl || 'http://127.0.0.1:9090';
-      return {
-        command: 'docker',
-        args: [
-          'run',
-          '-i',
-          '--rm',
-          '--network=host',
-          '-e', `INVOKEAI_BASE_URL=${invokeaiUrl}`,
-          'invokeai-mcp-server'
-        ]
-      };
-    }
+    (config) => ({
+      command: 'docker',
+      args: ['run', '-i', '--rm', '--network=host', 'invokeai-mcp-server']
+    })
