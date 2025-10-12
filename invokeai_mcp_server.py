@@ -73,8 +73,24 @@ async def wait_for_completion(batch_id: str, queue_id: str = DEFAULT_QUEUE_ID, t
         response.raise_for_status()
         status_data = response.json()
 
+        # Check for failures
+        failed_count = status_data.get("failed", 0)
+        if failed_count > 0:
+            # Try to get error details from the queue
+            queue_status_response = await client.get(f"/api/v1/queue/{queue_id}/status")
+            queue_status_response.raise_for_status()
+            queue_data = queue_status_response.json()
+
+            raise RuntimeError(
+                f"Image generation failed. Batch {batch_id} has {failed_count} failed item(s). "
+                f"Queue status: {json.dumps(queue_data, indent=2)}"
+            )
+
         # Check completion
-        if status_data.get("completed") == status_data.get("total"):
+        completed = status_data.get("completed", 0)
+        total = status_data.get("total", 0)
+
+        if completed == total and total > 0:
             # Get most recent non-intermediate image
             images_response = await client.get("/api/v1/images/?is_intermediate=false&limit=10")
             images_response.raise_for_status()
@@ -144,8 +160,16 @@ async def get_model_info(model_key: str) -> Optional[dict]:
     try:
         response = await client.get(f"/api/v2/models/i/{model_key}")
         response.raise_for_status()
-        return response.json()
-    except:
+        model_data = response.json()
+
+        # Ensure we have a valid dictionary
+        if not isinstance(model_data, dict):
+            logger.error(f"Model info for {model_key} is not a dictionary: {type(model_data)}")
+            return None
+
+        return model_data
+    except Exception as e:
+        logger.error(f"Error fetching model info for {model_key}: {e}")
         return None
 
 
@@ -153,6 +177,9 @@ async def create_text2img_graph(
     prompt: str,
     negative_prompt: str = "",
     model_key: Optional[str] = None,
+    lora_key: Optional[str] = None,
+    lora_weight: float = 1.0,
+    vae_key: Optional[str] = None,
     width: int = 512,
     height: int = 512,
     steps: int = 30,
@@ -160,7 +187,7 @@ async def create_text2img_graph(
     scheduler: str = "euler",
     seed: Optional[int] = None
 ) -> dict:
-    """Create a text-to-image generation graph."""
+    """Create a text-to-image generation graph with optional LoRA and VAE support."""
 
     # Use default model if not specified
     if model_key is None:
@@ -178,122 +205,232 @@ async def create_text2img_graph(
     if not model_info:
         raise ValueError(f"Model {model_key} not found")
 
+    # Validate model info has required fields
+    if not isinstance(model_info, dict):
+        raise ValueError(f"Model {model_key} returned invalid data type: {type(model_info)}")
+
+    required_fields = ["key", "hash", "name", "base", "type"]
+    for field in required_fields:
+        if field not in model_info or model_info[field] is None:
+            raise ValueError(f"Model {model_key} is missing required field: {field}")
+
     # Generate random seed if not provided
     if seed is None:
         import random
         seed = random.randint(0, 2**32 - 1)
 
-    graph = {
-        "id": "text2img_graph",
-        "nodes": {
-            # Main model loader
-            "model_loader": {
-                "type": "main_model_loader",
-                "id": "model_loader",
-                "model": {
-                    "key": model_info["key"],
-                    "hash": model_info["hash"],
-                    "name": model_info["name"],
-                    "base": model_info["base"],
-                    "type": model_info["type"]
-                }
-            },
+    # Detect if this is an SDXL model
+    is_sdxl = model_info["base"] == "sdxl"
 
-            # Positive prompt encoding
-            "positive_prompt": {
-                "type": "compel",
-                "id": "positive_prompt",
-                "prompt": prompt
-            },
-
-            # Negative prompt encoding
-            "negative_prompt": {
-                "type": "compel",
-                "id": "negative_prompt",
-                "prompt": negative_prompt
-            },
-
-            # Noise generation
-            "noise": {
-                "type": "noise",
-                "id": "noise",
-                "seed": seed,
-                "width": width,
-                "height": height,
-                "use_cpu": False
-            },
-
-            # Denoise latents (main generation step)
-            "denoise": {
-                "type": "denoise_latents",
-                "id": "denoise",
-                "steps": steps,
-                "cfg_scale": cfg_scale,
-                "scheduler": scheduler,
-                "denoising_start": 0,
-                "denoising_end": 1
-            },
-
-            # Convert latents to image
-            "latents_to_image": {
-                "type": "l2i",
-                "id": "latents_to_image"
-            },
-
-            # Save image
-            "save_image": {
-                "type": "save_image",
-                "id": "save_image",
-                "is_intermediate": False
+    # Build nodes dictionary
+    nodes = {
+        # Main model loader - use sdxl_model_loader for SDXL models
+        "model_loader": {
+            "type": "sdxl_model_loader" if is_sdxl else "main_model_loader",
+            "id": "model_loader",
+            "model": {
+                "key": model_info["key"],
+                "hash": model_info["hash"],
+                "name": model_info["name"],
+                "base": model_info["base"],
+                "type": model_info["type"]
             }
         },
-        "edges": [
-            # Connect model loader to denoise
+
+        # Positive prompt encoding - use sdxl_compel_prompt for SDXL
+        "positive_prompt": {
+            "type": "sdxl_compel_prompt" if is_sdxl else "compel",
+            "id": "positive_prompt",
+            "prompt": prompt,
+            **({"style": prompt} if is_sdxl else {})
+        },
+
+        # Negative prompt encoding - use sdxl_compel_prompt for SDXL
+        "negative_prompt": {
+            "type": "sdxl_compel_prompt" if is_sdxl else "compel",
+            "id": "negative_prompt",
+            "prompt": negative_prompt,
+            **({"style": ""} if is_sdxl else {})
+        },
+
+        # Noise generation
+        "noise": {
+            "type": "noise",
+            "id": "noise",
+            "seed": seed,
+            "width": width,
+            "height": height,
+            "use_cpu": False
+        },
+
+        # Denoise latents (main generation step)
+        "denoise": {
+            "type": "denoise_latents",
+            "id": "denoise",
+            "steps": steps,
+            "cfg_scale": cfg_scale,
+            "scheduler": scheduler,
+            "denoising_start": 0,
+            "denoising_end": 1
+        },
+
+        # Convert latents to image
+        "latents_to_image": {
+            "type": "l2i",
+            "id": "latents_to_image"
+        },
+
+        # Save image
+        "save_image": {
+            "type": "save_image",
+            "id": "save_image",
+            "is_intermediate": False
+        }
+    }
+
+    # Add LoRA loader if requested
+    if lora_key is not None:
+        lora_info = await get_model_info(lora_key)
+        if not lora_info:
+            raise ValueError(f"LoRA model {lora_key} not found")
+
+        # Validate LoRA info has required fields
+        required_fields = ["key", "hash", "name", "base", "type"]
+        for field in required_fields:
+            if field not in lora_info or lora_info[field] is None:
+                raise ValueError(f"LoRA model {lora_key} is missing required field: {field}")
+
+        nodes["lora_loader"] = {
+            "type": "lora_loader",
+            "id": "lora_loader",
+            "lora": {
+                "key": lora_info["key"],
+                "hash": lora_info["hash"],
+                "name": lora_info["name"],
+                "base": lora_info["base"],
+                "type": lora_info["type"]
+            },
+            "weight": lora_weight
+        }
+
+    # Add VAE loader if requested (to override model's built-in VAE)
+    if vae_key is not None:
+        vae_info = await get_model_info(vae_key)
+        if not vae_info:
+            raise ValueError(f"VAE model {vae_key} not found")
+
+        # Validate VAE info has required fields
+        required_fields = ["key", "hash", "name", "base", "type"]
+        for field in required_fields:
+            if field not in vae_info or vae_info[field] is None:
+                raise ValueError(f"VAE model {vae_key} is missing required field: {field}")
+
+        nodes["vae_loader"] = {
+            "type": "vae_loader",
+            "id": "vae_loader",
+            "vae_model": {
+                "key": vae_info["key"],
+                "hash": vae_info["hash"],
+                "name": vae_info["name"],
+                "base": vae_info["base"],
+                "type": vae_info["type"]
+            }
+        }
+
+    # Build edges
+    edges = []
+
+    # Determine source for UNet and CLIP (model_loader or lora_loader)
+    unet_source = "lora_loader" if lora_key is not None else "model_loader"
+    clip_source = "lora_loader" if lora_key is not None else "model_loader"
+    # Determine source for VAE (vae_loader if specified, otherwise model_loader)
+    vae_source = "vae_loader" if vae_key is not None else "model_loader"
+
+    # If using LoRA, connect model_loader to lora_loader first
+    if lora_key is not None:
+        edges.extend([
             {
                 "source": {"node_id": "model_loader", "field": "unet"},
-                "destination": {"node_id": "denoise", "field": "unet"}
+                "destination": {"node_id": "lora_loader", "field": "unet"}
             },
             {
                 "source": {"node_id": "model_loader", "field": "clip"},
-                "destination": {"node_id": "positive_prompt", "field": "clip"}
-            },
-            {
-                "source": {"node_id": "model_loader", "field": "clip"},
-                "destination": {"node_id": "negative_prompt", "field": "clip"}
-            },
-
-            # Connect prompts to denoise
-            {
-                "source": {"node_id": "positive_prompt", "field": "conditioning"},
-                "destination": {"node_id": "denoise", "field": "positive_conditioning"}
-            },
-            {
-                "source": {"node_id": "negative_prompt", "field": "conditioning"},
-                "destination": {"node_id": "denoise", "field": "negative_conditioning"}
-            },
-
-            # Connect noise to denoise
-            {
-                "source": {"node_id": "noise", "field": "noise"},
-                "destination": {"node_id": "denoise", "field": "noise"}
-            },
-
-            # Connect denoise to latents_to_image
-            {
-                "source": {"node_id": "denoise", "field": "latents"},
-                "destination": {"node_id": "latents_to_image", "field": "latents"}
-            },
-            {
-                "source": {"node_id": "model_loader", "field": "vae"},
-                "destination": {"node_id": "latents_to_image", "field": "vae"}
-            },
-
-            # Connect latents_to_image to save_image
-            {
-                "source": {"node_id": "latents_to_image", "field": "image"},
-                "destination": {"node_id": "save_image", "field": "image"}
+                "destination": {"node_id": "lora_loader", "field": "clip"}
             }
-        ]
+        ])
+        # Note: lora_loader doesn't have a clip2 field, so for SDXL we route clip2 directly from model_loader
+
+    # Connect UNet and CLIP to downstream nodes
+    edges.extend([
+        # Connect UNet to denoise
+        {
+            "source": {"node_id": unet_source, "field": "unet"},
+            "destination": {"node_id": "denoise", "field": "unet"}
+        },
+        # Connect CLIP to prompts
+        {
+            "source": {"node_id": clip_source, "field": "clip"},
+            "destination": {"node_id": "positive_prompt", "field": "clip"}
+        },
+        {
+            "source": {"node_id": clip_source, "field": "clip"},
+            "destination": {"node_id": "negative_prompt", "field": "clip"}
+        },
+    ])
+
+    # For SDXL models, also connect clip2
+    # Note: clip2 always comes from model_loader, even when using LoRA (lora_loader doesn't support clip2)
+    if is_sdxl:
+        edges.extend([
+            {
+                "source": {"node_id": "model_loader", "field": "clip2"},
+                "destination": {"node_id": "positive_prompt", "field": "clip2"}
+            },
+            {
+                "source": {"node_id": "model_loader", "field": "clip2"},
+                "destination": {"node_id": "negative_prompt", "field": "clip2"}
+            },
+        ])
+
+    edges.extend([
+
+        # Connect prompts to denoise
+        {
+            "source": {"node_id": "positive_prompt", "field": "conditioning"},
+            "destination": {"node_id": "denoise", "field": "positive_conditioning"}
+        },
+        {
+            "source": {"node_id": "negative_prompt", "field": "conditioning"},
+            "destination": {"node_id": "denoise", "field": "negative_conditioning"}
+        },
+
+        # Connect noise to denoise
+        {
+            "source": {"node_id": "noise", "field": "noise"},
+            "destination": {"node_id": "denoise", "field": "noise"}
+        },
+
+        # Connect denoise to latents_to_image
+        {
+            "source": {"node_id": "denoise", "field": "latents"},
+            "destination": {"node_id": "latents_to_image", "field": "latents"}
+        },
+        {
+            "source": {"node_id": vae_source, "field": "vae"},
+            "destination": {"node_id": "latents_to_image", "field": "vae"}
+        },
+
+        # Connect latents_to_image to save_image
+        {
+            "source": {"node_id": "latents_to_image", "field": "image"},
+            "destination": {"node_id": "save_image", "field": "image"}
+        }
+    ])
+
+    graph = {
+        "id": "text2img_graph",
+        "nodes": nodes,
+        "edges": edges
     }
 
     return graph
@@ -305,12 +442,15 @@ async def create_img2img_graph(
     negative_prompt: str = "",
     strength: float = 0.75,
     model_key: Optional[str] = None,
+    lora_key: Optional[str] = None,
+    lora_weight: float = 1.0,
+    vae_key: Optional[str] = None,
     steps: int = 30,
     cfg_scale: float = 7.5,
     scheduler: str = "euler",
     seed: Optional[int] = None
 ) -> dict:
-    """Create an image-to-image generation graph."""
+    """Create an image-to-image generation graph with optional LoRA and VAE support."""
 
     # Use default model if not specified
     if model_key is None:
@@ -327,6 +467,15 @@ async def create_img2img_graph(
     if not model_info:
         raise ValueError(f"Model {model_key} not found")
 
+    # Validate model info has required fields
+    if not isinstance(model_info, dict):
+        raise ValueError(f"Model {model_key} returned invalid data type: {type(model_info)}")
+
+    required_fields = ["key", "hash", "name", "base", "type"]
+    for field in required_fields:
+        if field not in model_info or model_info[field] is None:
+            raise ValueError(f"Model {model_key} is missing required field: {field}")
+
     # Generate random seed if not provided
     if seed is None:
         import random
@@ -338,142 +487,242 @@ async def create_img2img_graph(
     denoising_start = 1.0 - strength
     denoising_end = 1.0
 
-    graph = {
-        "id": "img2img_graph",
-        "nodes": {
-            # Image to latents - convert input image
-            "image_to_latents": {
-                "type": "i2l",
-                "id": "image_to_latents",
-                "image": {
-                    "image_name": image_name
-                }
-            },
+    # Detect if this is an SDXL model
+    is_sdxl = model_info["base"] == "sdxl"
 
-            # Main model loader
-            "model_loader": {
-                "type": "main_model_loader",
-                "id": "model_loader",
-                "model": {
-                    "key": model_info["key"],
-                    "hash": model_info["hash"],
-                    "name": model_info["name"],
-                    "base": model_info["base"],
-                    "type": model_info["type"]
-                }
-            },
-
-            # Positive prompt encoding
-            "positive_prompt": {
-                "type": "compel",
-                "id": "positive_prompt",
-                "prompt": prompt
-            },
-
-            # Negative prompt encoding
-            "negative_prompt": {
-                "type": "compel",
-                "id": "negative_prompt",
-                "prompt": negative_prompt
-            },
-
-            # Noise generation
-            "noise": {
-                "type": "noise",
-                "id": "noise",
-                "seed": seed,
-                "use_cpu": False
-            },
-
-            # Denoise latents (transformation step)
-            "denoise": {
-                "type": "denoise_latents",
-                "id": "denoise",
-                "steps": steps,
-                "cfg_scale": cfg_scale,
-                "scheduler": scheduler,
-                "denoising_start": denoising_start,
-                "denoising_end": denoising_end
-            },
-
-            # Convert latents to image
-            "latents_to_image": {
-                "type": "l2i",
-                "id": "latents_to_image"
-            },
-
-            # Save image
-            "save_image": {
-                "type": "save_image",
-                "id": "save_image",
-                "is_intermediate": False
+    # Build nodes dictionary
+    nodes = {
+        # Image to latents - convert input image
+        "image_to_latents": {
+            "type": "i2l",
+            "id": "image_to_latents",
+            "image": {
+                "image_name": image_name
             }
         },
-        "edges": [
-            # Connect image_to_latents to denoise (provides starting latents)
-            {
-                "source": {"node_id": "image_to_latents", "field": "latents"},
-                "destination": {"node_id": "denoise", "field": "latents"}
-            },
-            {
-                "source": {"node_id": "image_to_latents", "field": "width"},
-                "destination": {"node_id": "noise", "field": "width"}
-            },
-            {
-                "source": {"node_id": "image_to_latents", "field": "height"},
-                "destination": {"node_id": "noise", "field": "height"}
-            },
 
-            # Connect model loader to denoise and prompts
+        # Main model loader - use sdxl_model_loader for SDXL models
+        "model_loader": {
+            "type": "sdxl_model_loader" if is_sdxl else "main_model_loader",
+            "id": "model_loader",
+            "model": {
+                "key": model_info["key"],
+                "hash": model_info["hash"],
+                "name": model_info["name"],
+                "base": model_info["base"],
+                "type": model_info["type"]
+            }
+        },
+
+        # Positive prompt encoding - use sdxl_compel_prompt for SDXL
+        "positive_prompt": {
+            "type": "sdxl_compel_prompt" if is_sdxl else "compel",
+            "id": "positive_prompt",
+            "prompt": prompt,
+            **({"style": prompt} if is_sdxl else {})
+        },
+
+        # Negative prompt encoding - use sdxl_compel_prompt for SDXL
+        "negative_prompt": {
+            "type": "sdxl_compel_prompt" if is_sdxl else "compel",
+            "id": "negative_prompt",
+            "prompt": negative_prompt,
+            **({"style": ""} if is_sdxl else {})
+        },
+
+        # Noise generation
+        "noise": {
+            "type": "noise",
+            "id": "noise",
+            "seed": seed,
+            "use_cpu": False
+        },
+
+        # Denoise latents (transformation step)
+        "denoise": {
+            "type": "denoise_latents",
+            "id": "denoise",
+            "steps": steps,
+            "cfg_scale": cfg_scale,
+            "scheduler": scheduler,
+            "denoising_start": denoising_start,
+            "denoising_end": denoising_end
+        },
+
+        # Convert latents to image
+        "latents_to_image": {
+            "type": "l2i",
+            "id": "latents_to_image"
+        },
+
+        # Save image
+        "save_image": {
+            "type": "save_image",
+            "id": "save_image",
+            "is_intermediate": False
+        }
+    }
+
+    # Add LoRA loader if requested
+    if lora_key is not None:
+        lora_info = await get_model_info(lora_key)
+        if not lora_info:
+            raise ValueError(f"LoRA model {lora_key} not found")
+
+        # Validate LoRA info has required fields
+        required_fields = ["key", "hash", "name", "base", "type"]
+        for field in required_fields:
+            if field not in lora_info or lora_info[field] is None:
+                raise ValueError(f"LoRA model {lora_key} is missing required field: {field}")
+
+        nodes["lora_loader"] = {
+            "type": "lora_loader",
+            "id": "lora_loader",
+            "lora": {
+                "key": lora_info["key"],
+                "hash": lora_info["hash"],
+                "name": lora_info["name"],
+                "base": lora_info["base"],
+                "type": lora_info["type"]
+            },
+            "weight": lora_weight
+        }
+
+    # Add VAE loader if requested (to override model's built-in VAE)
+    if vae_key is not None:
+        vae_info = await get_model_info(vae_key)
+        if not vae_info:
+            raise ValueError(f"VAE model {vae_key} not found")
+
+        # Validate VAE info has required fields
+        required_fields = ["key", "hash", "name", "base", "type"]
+        for field in required_fields:
+            if field not in vae_info or vae_info[field] is None:
+                raise ValueError(f"VAE model {vae_key} is missing required field: {field}")
+
+        nodes["vae_loader"] = {
+            "type": "vae_loader",
+            "id": "vae_loader",
+            "vae_model": {
+                "key": vae_info["key"],
+                "hash": vae_info["hash"],
+                "name": vae_info["name"],
+                "base": vae_info["base"],
+                "type": vae_info["type"]
+            }
+        }
+
+    # Build edges
+    edges = []
+
+    # Determine source for UNet and CLIP (model_loader or lora_loader)
+    unet_source = "lora_loader" if lora_key is not None else "model_loader"
+    clip_source = "lora_loader" if lora_key is not None else "model_loader"
+    # Determine source for VAE (vae_loader if specified, otherwise model_loader)
+    vae_source = "vae_loader" if vae_key is not None else "model_loader"
+
+    # If using LoRA, connect model_loader to lora_loader first
+    if lora_key is not None:
+        edges.extend([
             {
                 "source": {"node_id": "model_loader", "field": "unet"},
-                "destination": {"node_id": "denoise", "field": "unet"}
+                "destination": {"node_id": "lora_loader", "field": "unet"}
             },
             {
                 "source": {"node_id": "model_loader", "field": "clip"},
-                "destination": {"node_id": "positive_prompt", "field": "clip"}
-            },
-            {
-                "source": {"node_id": "model_loader", "field": "clip"},
-                "destination": {"node_id": "negative_prompt", "field": "clip"}
-            },
-
-            # Connect prompts to denoise
-            {
-                "source": {"node_id": "positive_prompt", "field": "conditioning"},
-                "destination": {"node_id": "denoise", "field": "positive_conditioning"}
-            },
-            {
-                "source": {"node_id": "negative_prompt", "field": "conditioning"},
-                "destination": {"node_id": "denoise", "field": "negative_conditioning"}
-            },
-
-            # Connect noise to denoise
-            {
-                "source": {"node_id": "noise", "field": "noise"},
-                "destination": {"node_id": "denoise", "field": "noise"}
-            },
-
-            # Connect denoise to latents_to_image
-            {
-                "source": {"node_id": "denoise", "field": "latents"},
-                "destination": {"node_id": "latents_to_image", "field": "latents"}
-            },
-            {
-                "source": {"node_id": "model_loader", "field": "vae"},
-                "destination": {"node_id": "latents_to_image", "field": "vae"}
-            },
-            {
-                "source": {"node_id": "model_loader", "field": "vae"},
-                "destination": {"node_id": "image_to_latents", "field": "vae"}
-            },
-
-            # Connect latents_to_image to save_image
-            {
-                "source": {"node_id": "latents_to_image", "field": "image"},
-                "destination": {"node_id": "save_image", "field": "image"}
+                "destination": {"node_id": "lora_loader", "field": "clip"}
             }
-        ]
+        ])
+        # Note: lora_loader doesn't have a clip2 field, so for SDXL we route clip2 directly from model_loader
+
+    # Connect image_to_latents edges
+    edges.extend([
+        # Connect image_to_latents to denoise (provides starting latents)
+        {
+            "source": {"node_id": "image_to_latents", "field": "latents"},
+            "destination": {"node_id": "denoise", "field": "latents"}
+        },
+        {
+            "source": {"node_id": "image_to_latents", "field": "width"},
+            "destination": {"node_id": "noise", "field": "width"}
+        },
+        {
+            "source": {"node_id": "image_to_latents", "field": "height"},
+            "destination": {"node_id": "noise", "field": "height"}
+        },
+
+        # Connect UNet to denoise
+        {
+            "source": {"node_id": unet_source, "field": "unet"},
+            "destination": {"node_id": "denoise", "field": "unet"}
+        },
+        # Connect CLIP to prompts
+        {
+            "source": {"node_id": clip_source, "field": "clip"},
+            "destination": {"node_id": "positive_prompt", "field": "clip"}
+        },
+        {
+            "source": {"node_id": clip_source, "field": "clip"},
+            "destination": {"node_id": "negative_prompt", "field": "clip"}
+        },
+    ])
+
+    # For SDXL models, also connect clip2
+    # Note: clip2 always comes from model_loader, even when using LoRA (lora_loader doesn't support clip2)
+    if is_sdxl:
+        edges.extend([
+            {
+                "source": {"node_id": "model_loader", "field": "clip2"},
+                "destination": {"node_id": "positive_prompt", "field": "clip2"}
+            },
+            {
+                "source": {"node_id": "model_loader", "field": "clip2"},
+                "destination": {"node_id": "negative_prompt", "field": "clip2"}
+            },
+        ])
+
+    edges.extend([
+        # Connect prompts to denoise
+        {
+            "source": {"node_id": "positive_prompt", "field": "conditioning"},
+            "destination": {"node_id": "denoise", "field": "positive_conditioning"}
+        },
+        {
+            "source": {"node_id": "negative_prompt", "field": "conditioning"},
+            "destination": {"node_id": "denoise", "field": "negative_conditioning"}
+        },
+
+        # Connect noise to denoise
+        {
+            "source": {"node_id": "noise", "field": "noise"},
+            "destination": {"node_id": "denoise", "field": "noise"}
+        },
+
+        # Connect denoise to latents_to_image
+        {
+            "source": {"node_id": "denoise", "field": "latents"},
+            "destination": {"node_id": "latents_to_image", "field": "latents"}
+        },
+        {
+            "source": {"node_id": vae_source, "field": "vae"},
+            "destination": {"node_id": "latents_to_image", "field": "vae"}
+        },
+        {
+            "source": {"node_id": "model_loader", "field": "vae"},
+            "destination": {"node_id": "image_to_latents", "field": "vae"}
+        },
+
+        # Connect latents_to_image to save_image
+        {
+            "source": {"node_id": "latents_to_image", "field": "image"},
+            "destination": {"node_id": "save_image", "field": "image"}
+        }
+    ])
+
+    graph = {
+        "id": "img2img_graph",
+        "nodes": nodes,
+        "edges": edges
     }
 
     return graph
@@ -494,6 +743,12 @@ async def upscale_image(image_name: str, model_key: Optional[str] = None) -> str
     model_info = await get_model_info(model_key)
     if not model_info:
         raise ValueError(f"Upscaling model {model_key} not found")
+
+    # Validate model info has required fields
+    required_fields = ["key", "hash", "name", "base", "type"]
+    for field in required_fields:
+        if field not in model_info or model_info[field] is None:
+            raise ValueError(f"Upscaling model {model_key} is missing required field: {field}")
 
     # Create simple upscaling graph
     graph = {
@@ -608,6 +863,21 @@ async def list_tools() -> list[Tool]:
                     "model_key": {
                         "type": "string",
                         "description": "Model identifier (optional, uses default if not specified)"
+                    },
+                    "lora_key": {
+                        "type": "string",
+                        "description": "LoRA model identifier (optional, for fine-tuned style control)"
+                    },
+                    "lora_weight": {
+                        "type": "number",
+                        "description": "LoRA weight/strength (0.0-2.0, default: 1.0)",
+                        "default": 1.0,
+                        "minimum": 0.0,
+                        "maximum": 2.0
+                    },
+                    "vae_key": {
+                        "type": "string",
+                        "description": "VAE model identifier (optional, overrides model's built-in VAE)"
                     }
                 },
                 "required": ["prompt"]
@@ -666,6 +936,21 @@ async def list_tools() -> list[Tool]:
                     "model_key": {
                         "type": "string",
                         "description": "Model identifier (optional, uses default if not specified)"
+                    },
+                    "lora_key": {
+                        "type": "string",
+                        "description": "LoRA model identifier (optional, for fine-tuned style control)"
+                    },
+                    "lora_weight": {
+                        "type": "number",
+                        "description": "LoRA weight/strength (0.0-2.0, default: 1.0)",
+                        "default": 1.0,
+                        "minimum": 0.0,
+                        "maximum": 2.0
+                    },
+                    "vae_key": {
+                        "type": "string",
+                        "description": "VAE model identifier (optional, overrides model's built-in VAE)"
                     }
                 },
                 "required": ["image_path", "prompt"]
@@ -736,6 +1021,9 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent | ImageConten
             scheduler = arguments.get("scheduler", "euler")
             seed = arguments.get("seed")
             model_key = arguments.get("model_key")
+            lora_key = arguments.get("lora_key")
+            lora_weight = arguments.get("lora_weight", 1.0)
+            vae_key = arguments.get("vae_key")
 
             logger.info(f"Generating image with prompt: {prompt[:50]}...")
 
@@ -744,6 +1032,9 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent | ImageConten
                 prompt=prompt,
                 negative_prompt=negative_prompt,
                 model_key=model_key,
+                lora_key=lora_key,
+                lora_weight=lora_weight,
+                vae_key=vae_key,
                 width=width,
                 height=height,
                 steps=steps,
@@ -795,6 +1086,9 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent | ImageConten
             scheduler = arguments.get("scheduler", "euler")
             seed = arguments.get("seed")
             model_key = arguments.get("model_key")
+            lora_key = arguments.get("lora_key")
+            lora_weight = arguments.get("lora_weight", 1.0)
+            vae_key = arguments.get("vae_key")
 
             logger.info(f"Img2img transformation with prompt: {prompt[:50]}...")
 
@@ -812,6 +1106,9 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent | ImageConten
                 negative_prompt=negative_prompt,
                 strength=strength,
                 model_key=model_key,
+                lora_key=lora_key,
+                lora_weight=lora_weight,
+                vae_key=vae_key,
                 steps=steps,
                 cfg_scale=cfg_scale,
                 scheduler=scheduler,

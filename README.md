@@ -12,6 +12,9 @@ This MCP server provides a seamless bridge between Claude Code and your local In
 
 - **Text-to-Image Generation**: Create images from natural language descriptions
 - **Image-to-Image Transformation**: Refine, modify, or stylize existing images
+- **LoRA Support**: Apply fine-tuned LoRA models for specialized styles (logos, illustrations, etc.)
+- **Full SDXL Support**: Automatic detection and proper configuration for SDXL models with dual CLIP encoders
+- **VAE Override Support**: Use external VAE models to fix incompatible built-in VAEs or optimize for specific use cases
 - **AI-Powered Upscaling**: Enhance images to higher resolutions (2x-4x) using state-of-the-art Spandrel models
 - **Flexible Model Support**: Compatible with Stable Diffusion 1.5, SDXL, and custom fine-tuned models
 - **Comprehensive Parameter Control**: Fine-tune generation with width, height, steps, CFG scale, schedulers, and seeds
@@ -90,7 +93,7 @@ After registration, restart Claude Code or start a new conversation to access th
 ### Available Tools
 
 #### `generate_image`
-Generate images from text prompts.
+Generate images from text prompts with optional LoRA support.
 
 **Parameters:**
 - `prompt` (string, required): Description of the image to generate
@@ -102,14 +105,22 @@ Generate images from text prompts.
 - `scheduler` (string, optional, default: "euler"): Sampling scheduler
 - `seed` (integer, optional): Random seed for reproducibility
 - `model_key` (string, optional): Specific model identifier
+- `lora_key` (string, optional): LoRA model identifier for fine-tuned style control
+- `lora_weight` (float, optional, default: 1.0): LoRA strength (0.0-2.0)
+- `vae_key` (string, optional): VAE model identifier to override model's built-in VAE
 
 **Example:**
 ```
 Generate a minimalist tech logo with blue and white colors, geometric shapes, flat design
 ```
 
+**Example with LoRA:**
+```
+Generate a professional logo using the logomkrdsxl LoRA with prompt: "tech startup logo, modern, clean"
+```
+
 #### `img2img`
-Transform existing images using text guidance.
+Transform existing images using text guidance with optional LoRA support.
 
 **Parameters:**
 - `image_path` (string, required): Path to source image or `image_name` from previous generation
@@ -121,11 +132,19 @@ Transform existing images using text guidance.
 - `scheduler` (string, optional, default: "euler"): Sampling scheduler
 - `seed` (integer, optional): Random seed for reproducibility
 - `model_key` (string, optional): Specific model identifier
+- `lora_key` (string, optional): LoRA model identifier for fine-tuned style control
+- `lora_weight` (float, optional, default: 1.0): LoRA strength (0.0-2.0)
+- `vae_key` (string, optional): VAE model identifier to override model's built-in VAE
 
 **Example:**
 ```
 Refine this logo with strength 0.6: /path/to/sketch.png
 Prompt: professional polished logo, clean lines, modern aesthetic
+```
+
+**Example with LoRA:**
+```
+Transform logo.png with logomkrdsxl LoRA at strength 0.6 to make it more professional
 ```
 
 #### `upscale_image`
@@ -198,10 +217,18 @@ Model repositories:
 
 ### Logo Design Pipeline
 ```
-1. Generate initial concept (512x512, 25 steps)
-2. Refine with img2img (strength 0.6-0.7)
+1. Generate initial concept with LoRA (512x512, 25 steps, logomkrdsxl LoRA)
+2. Refine with img2img + LoRA (strength 0.6-0.7)
 3. Upscale to high resolution (4x)
 4. Export final asset
+```
+
+### LoRA Workflow
+```
+1. List available LoRAs: list_models(model_type="lora")
+2. Generate with LoRA: generate_image(prompt="...", lora_key="...", lora_weight=1.0)
+3. Experiment with weights: Try 0.5 (subtle), 1.0 (standard), 1.5 (strong)
+4. Combine with img2img for iterative refinement
 ```
 
 ### Rapid Prototyping
@@ -246,6 +273,8 @@ All workflows are automatically constructed and managed by the server based on t
 | Import errors | Missing dependencies | Run `pip install -r requirements.txt` |
 | Generation fails | Insufficient VRAM | Reduce image size or use SD 1.5 |
 | Upscaling fails | No Spandrel models | Install upscaling models in InvokeAI |
+| SDXL + LoRA issues | Model incompatibility | Ensure LoRA base type matches SDXL model |
+| Black images (SDXL) | Corrupt/missing VAE | Use VAE override: `vae_key: "sdxl.vae"` or `vae_key: "sdxl-vae-fp16-fix"` |
 
 ### Uninstalling
 
