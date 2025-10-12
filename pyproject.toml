@@ -1,0 +1,70 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "invokeai-mcp-server"
+version = "1.0.0"
+description = "A Model Context Protocol server for InvokeAI image generation"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "CoinsTax LLC", email = "support@coinstax.com"}
+]
+maintainers = [
+    {name = "CoinsTax LLC", email = "support@coinstax.com"}
+]
+keywords = [
+    "mcp",
+    "model-context-protocol",
+    "invokeai",
+    "stable-diffusion",
+    "sdxl",
+    "image-generation",
+    "ai",
+    "claude",
+    "lora",
+    "text-to-image",
+    "img2img"
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Multimedia :: Graphics",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+    "Environment :: Console",
+]
+dependencies = [
+    "httpx>=0.24.0",
+    "mcp>=0.1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/coinstax/invokeai-mcp-server"
+Documentation = "https://github.com/coinstax/invokeai-mcp-server#readme"
+Repository = "https://github.com/coinstax/invokeai-mcp-server"
+Issues = "https://github.com/coinstax/invokeai-mcp-server/issues"
+Changelog = "https://github.com/coinstax/invokeai-mcp-server/blob/main/CHANGELOG.md"
+
+[project.scripts]
+invokeai-mcp-server = "invokeai_mcp_server:main"
+
+[tool.setuptools]
+py-modules = ["invokeai_mcp_server"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["invokeai_mcp_server*"]
+
+[tool.setuptools.package-data]
+"*" = ["*.md", "LICENSE"]

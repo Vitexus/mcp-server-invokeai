@@ -29,7 +29,35 @@ This MCP server provides a seamless bridge between Claude Code and your local In
 
 ## Installation
 
-### Quick Setup
+### Option 1: Install from PyPI (Recommended)
+
+The easiest way to install the InvokeAI MCP server:
+
+```bash
+pip install invokeai-mcp-server
+```
+
+Then register with Claude Code:
+
+```bash
+# Linux/macOS/WSL
+claude mcp add --scope user invokeai python -m invokeai_mcp_server
+
+# Windows
+claude mcp add --scope user invokeai python -m invokeai_mcp_server
+```
+
+### Option 2: Install via Smithery
+
+Install using the Smithery CLI for automatic configuration:
+
+```bash
+npx @smithery/cli install invokeai --client claude
+```
+
+### Option 3: Install from Source
+
+For development or customization:
 
 ```bash
 # Clone the repository
@@ -40,7 +68,7 @@ cd invokeai-mcp-server
 ./setup.sh
 ```
 
-### Manual Setup
+**Or manually:**
 
 ```bash
 # Clone the repository
@@ -57,9 +85,9 @@ pip install -r requirements.txt
 
 ## Configuration
 
-### Register with Claude Code
+### For Source Installation Only
 
-Use the Claude CLI to register the MCP server:
+If you installed from source, register with Claude Code:
 
 **Linux/WSL/macOS:**
 ```bash
@@ -83,7 +111,7 @@ claude mcp list
 
 Expected output:
 ```
-invokeai: /path/to/invokeai-mcp-server/venv/bin/python /path/to/invokeai-mcp-server/invokeai_mcp_server.py - ✓ Connected
+invokeai: ... - ✓ Connected
 ```
 
 After registration, restart Claude Code or start a new conversation to access the tools.
@@ -278,7 +306,18 @@ All workflows are automatically constructed and managed by the server based on t
 
 ### Uninstalling
 
-To remove the MCP server:
+**If installed via PyPI:**
+```bash
+pip uninstall invokeai-mcp-server
+claude mcp remove invokeai
+```
+
+**If installed via Smithery:**
+```bash
+smithery uninstall invokeai --client claude
+```
+
+**If installed from source:**
 ```bash
 claude mcp remove invokeai
 ```

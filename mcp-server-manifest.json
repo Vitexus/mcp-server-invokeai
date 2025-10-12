@@ -1,0 +1,90 @@
+{
+  "$schema": "https://modelcontextprotocol.io/schema/server-manifest.json",
+  "name": "invokeai",
+  "version": "1.0.0",
+  "description": "A Model Context Protocol server for InvokeAI image generation, supporting text-to-image, image-to-image, LoRA models, SDXL, VAE overrides, and AI upscaling",
+  "author": {
+    "name": "CoinsTax LLC",
+    "email": "support@coinstax.com",
+    "url": "https://github.com/coinstax"
+  },
+  "homepage": "https://github.com/coinstax/invokeai-mcp-server",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/coinstax/invokeai-mcp-server"
+  },
+  "license": "MIT",
+  "icon": "https://raw.githubusercontent.com/coinstax/invokeai-mcp-server/main/logo.png",
+  "keywords": [
+    "image-generation",
+    "stable-diffusion",
+    "sdxl",
+    "invokeai",
+    "ai",
+    "lora",
+    "text-to-image",
+    "img2img",
+    "upscaling",
+    "vae"
+  ],
+  "categories": [
+    "AI & Machine Learning",
+    "Image Generation",
+    "Stable Diffusion"
+  ],
+  "runtime": "python",
+  "installation": {
+    "type": "pypi",
+    "package": "invokeai-mcp-server"
+  },
+  "configuration": {
+    "required": [],
+    "optional": [
+      {
+        "name": "INVOKEAI_BASE_URL",
+        "description": "Base URL for InvokeAI API (default: http://127.0.0.1:9090)",
+        "type": "string",
+        "default": "http://127.0.0.1:9090"
+      }
+    ]
+  },
+  "capabilities": {
+    "tools": [
+      {
+        "name": "generate_image",
+        "description": "Generate images from text prompts with optional LoRA support and VAE override"
+      },
+      {
+        "name": "img2img",
+        "description": "Transform existing images using text guidance with optional LoRA support and VAE override"
+      },
+      {
+        "name": "upscale_image",
+        "description": "Upscale images to higher resolution using AI"
+      },
+      {
+        "name": "list_models",
+        "description": "List available models (main, LoRA, VAE, upscaling)"
+      },
+      {
+        "name": "get_queue_status",
+        "description": "Check InvokeAI processing queue status"
+      }
+    ]
+  },
+  "requirements": {
+    "external": [
+      {
+        "name": "InvokeAI",
+        "description": "InvokeAI v4.0+ running locally or remotely",
+        "url": "https://github.com/invoke-ai/InvokeAI",
+        "required": true
+      }
+    ]
+  },
+  "platform": {
+    "os": ["linux", "darwin", "win32"],
+    "arch": ["x64", "arm64"],
+    "python": ">=3.8"
+  }
+}
