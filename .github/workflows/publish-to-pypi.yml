@@ -107,6 +107,7 @@ jobs:
     permissions:
       contents: write  # IMPORTANT: mandatory for making GitHub Releases
       id-token: write  # IMPORTANT: mandatory for sigstore
+      attestations: write  # IMPORTANT: mandatory for artifact attestations
 
     steps:
     - name: Download all the dists
@@ -116,7 +117,7 @@ jobs:
         path: dist/
 
     - name: Sign the dists with Sigstore
-      uses: sigstore/gh-action-sigstore-python@v2.1.1
+      uses: sigstore/gh-action-sigstore-python@v3.0.0
       with:
         inputs: >-
           ./dist/*.tar.gz
