@@ -50,3 +50,4 @@ TESTING_*.md
 
 # MCP config (user-specific)
 mcp_config.json
+DEVELOPMENT_STATUS.md
