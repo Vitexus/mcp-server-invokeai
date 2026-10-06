@@ -11,7 +11,7 @@ Vcs-Browser: https://github.com/Vitexus/mcp-server-invokeai
 Package: mcp-server-invokeai
 Architecture: all
 Depends: ${misc:Depends}, ${python3:Depends},
- python3-mcp (>= 1:2.0.0),
+ python3-mcp (>= 1:2.0.0~b2),
  python3-fastmcp (>= 4.0.0~b3),
  python3-pydantic (>= 2),
  python3-httpx (>= 0.24.0),
