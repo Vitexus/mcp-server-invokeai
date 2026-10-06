@@ -2,7 +2,7 @@
 
 // Current version of this Pipeline https://github.com/VitexSoftware/BuildImages/blob/main/Test/Jenkinsfile
 
-// Restricted to debian:trixie: python3-mcp (>= 2) and python3-fastmcp (>= 4) are only published for trixie.
+// Restricted to debian:trixie on amd64: python3-mcp (>= 2) and python3-fastmcp (>= 4) are only published for trixie amd64/i386.
 String[] distributions = [
     'debian:trixie',
     // 'debian:forky', // Disabled: Forky is still unstable/research-only.
@@ -174,7 +174,7 @@ properties([
 ])
 
 def scmVars = [:]
-node('arm64') {
+node('amd64') {
     ansiColor('xterm') {
         stage('SCM Checkout') {
             // Run the one github.com checkout of this build on node-local disk,
@@ -209,7 +209,7 @@ distributions.each { distro ->
         def artifacts = []
         def buildVer = ''
 
-        node('arm64') {
+        node('amd64') {
             ansiColor('xterm') {
                 def root = nodeLocalRoot()
                 def buildId = localBuildId(distroCode)
