@@ -1,0 +1,5 @@
+mcp-server-invokeai (1.0.1-1) UNRELEASED; urgency=low
+
+  * Initial Debian packaging
+
+ -- Vítězslav Dvořák <info@vitexsoftware.cz>  Tue, 06 Oct 2026 17:11:52 +0200

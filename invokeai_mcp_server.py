@@ -7,24 +7,29 @@ Provides tools for image generation using a local InvokeAI instance.
 import asyncio
 import json
 import logging
-from typing import Any, Optional
+import os
+from typing import Annotated, Any, Literal, Optional
 from urllib.parse import urljoin
 
 import httpx
-from mcp.server import Server
-from mcp.types import Tool, TextContent, ImageContent, EmbeddedResource
-import mcp.server.stdio
+from fastmcp import FastMCP
+from mcp.types import ToolAnnotations
+from pydantic import Field
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("invokeai-mcp")
 
 # InvokeAI API configuration
-INVOKEAI_BASE_URL = "http://127.0.0.1:9090"
+INVOKEAI_BASE_URL = os.environ.get("INVOKEAI_BASE_URL", "http://127.0.0.1:9090")
+READ_ONLY = os.environ.get("INVOKEAI_READ_ONLY", "").lower() in ("1", "true", "yes")
 DEFAULT_QUEUE_ID = "default"
 
 # Initialize MCP server
-app = Server("invokeai")
+mcp = FastMCP("invokeai")
+
+READ_ONLY_ANNOTATIONS = ToolAnnotations(read_only_hint=True, destructive_hint=False, idempotent_hint=True, open_world_hint=True)
+CREATE_ANNOTATIONS = ToolAnnotations(read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=True)
 
 # HTTP client
 http_client: Optional[httpx.AsyncClient] = None
@@ -803,435 +808,164 @@ async def upscale_image(image_name: str, model_key: Optional[str] = None) -> str
     raise ValueError("Upscaling failed: no output image found")
 
 
-@app.list_tools()
-async def list_tools() -> list[Tool]:
-    """List available tools."""
-    return [
-        Tool(
-            name="generate_image",
-            description="Generate an image from a text prompt using InvokeAI. Returns the generated image URL.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "prompt": {
-                        "type": "string",
-                        "description": "The text prompt describing the image to generate"
-                    },
-                    "negative_prompt": {
-                        "type": "string",
-                        "description": "Negative prompt (things to avoid in the image)",
-                        "default": ""
-                    },
-                    "width": {
-                        "type": "integer",
-                        "description": "Image width in pixels",
-                        "default": 512,
-                        "minimum": 64,
-                        "maximum": 2048
-                    },
-                    "height": {
-                        "type": "integer",
-                        "description": "Image height in pixels",
-                        "default": 512,
-                        "minimum": 64,
-                        "maximum": 2048
-                    },
-                    "steps": {
-                        "type": "integer",
-                        "description": "Number of denoising steps",
-                        "default": 30,
-                        "minimum": 1,
-                        "maximum": 150
-                    },
-                    "cfg_scale": {
-                        "type": "number",
-                        "description": "Classifier-free guidance scale",
-                        "default": 7.5,
-                        "minimum": 1.0,
-                        "maximum": 20.0
-                    },
-                    "scheduler": {
-                        "type": "string",
-                        "description": "Sampling scheduler",
-                        "enum": ["euler", "euler_k", "lms", "ddim", "ddpm", "deis", "pndm", "heun", "dpm_2", "dpm_2_a", "dpmpp_2s", "dpmpp_2m", "dpmpp_2m_k", "dpmpp_sde", "dpmpp_sde_k", "unipc", "lcm"],
-                        "default": "euler"
-                    },
-                    "seed": {
-                        "type": "integer",
-                        "description": "Random seed for reproducibility (optional)"
-                    },
-                    "model_key": {
-                        "type": "string",
-                        "description": "Model identifier (optional, uses default if not specified)"
-                    },
-                    "lora_key": {
-                        "type": "string",
-                        "description": "LoRA model identifier (optional, for fine-tuned style control)"
-                    },
-                    "lora_weight": {
-                        "type": "number",
-                        "description": "LoRA weight/strength (0.0-2.0, default: 1.0)",
-                        "default": 1.0,
-                        "minimum": 0.0,
-                        "maximum": 2.0
-                    },
-                    "vae_key": {
-                        "type": "string",
-                        "description": "VAE model identifier (optional, overrides model's built-in VAE)"
-                    }
-                },
-                "required": ["prompt"]
-            }
-        ),
-        Tool(
-            name="img2img",
-            description="Transform an existing image using a text prompt (image-to-image generation). Useful for refining, modifying, or stylizing existing images.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "image_path": {
-                        "type": "string",
-                        "description": "Path to the source image file to transform"
-                    },
-                    "prompt": {
-                        "type": "string",
-                        "description": "The text prompt describing the desired transformation"
-                    },
-                    "negative_prompt": {
-                        "type": "string",
-                        "description": "Negative prompt (things to avoid)",
-                        "default": ""
-                    },
-                    "strength": {
-                        "type": "number",
-                        "description": "How much to transform the image (0.0-1.0). Higher = more changes. Typical: 0.6-0.8",
-                        "default": 0.75,
-                        "minimum": 0.0,
-                        "maximum": 1.0
-                    },
-                    "steps": {
-                        "type": "integer",
-                        "description": "Number of denoising steps",
-                        "default": 30,
-                        "minimum": 1,
-                        "maximum": 150
-                    },
-                    "cfg_scale": {
-                        "type": "number",
-                        "description": "Classifier-free guidance scale",
-                        "default": 7.5,
-                        "minimum": 1.0,
-                        "maximum": 20.0
-                    },
-                    "scheduler": {
-                        "type": "string",
-                        "description": "Sampling scheduler",
-                        "enum": ["euler", "euler_k", "lms", "ddim", "ddpm", "deis", "pndm", "heun", "dpm_2", "dpm_2_a", "dpmpp_2s", "dpmpp_2m", "dpmpp_2m_k", "dpmpp_sde", "dpmpp_sde_k", "unipc", "lcm"],
-                        "default": "euler"
-                    },
-                    "seed": {
-                        "type": "integer",
-                        "description": "Random seed for reproducibility (optional)"
-                    },
-                    "model_key": {
-                        "type": "string",
-                        "description": "Model identifier (optional, uses default if not specified)"
-                    },
-                    "lora_key": {
-                        "type": "string",
-                        "description": "LoRA model identifier (optional, for fine-tuned style control)"
-                    },
-                    "lora_weight": {
-                        "type": "number",
-                        "description": "LoRA weight/strength (0.0-2.0, default: 1.0)",
-                        "default": 1.0,
-                        "minimum": 0.0,
-                        "maximum": 2.0
-                    },
-                    "vae_key": {
-                        "type": "string",
-                        "description": "VAE model identifier (optional, overrides model's built-in VAE)"
-                    }
-                },
-                "required": ["image_path", "prompt"]
-            }
-        ),
-        Tool(
-            name="upscale_image",
-            description="Upscale an image to higher resolution using AI upscaling (typically 2x-4x). Great for creating high-res versions of generated images.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "image_path": {
-                        "type": "string",
-                        "description": "Path to the image file to upscale, OR image_name from a previous generation"
-                    },
-                    "model_key": {
-                        "type": "string",
-                        "description": "Upscaling model key to use (optional, uses default if not specified)"
-                    }
-                },
-                "required": ["image_path"]
-            }
-        ),
-        Tool(
-            name="list_models",
-            description="List available AI models in InvokeAI",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "model_type": {
-                        "type": "string",
-                        "description": "Type of models to list",
-                        "enum": ["main", "vae", "lora", "controlnet", "embedding", "spandrel_image_to_image"],
-                        "default": "main"
-                    }
-                }
-            }
-        ),
-        Tool(
-            name="get_queue_status",
-            description="Get the status of the InvokeAI processing queue",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "queue_id": {
-                        "type": "string",
-                        "description": "Queue identifier",
-                        "default": "default"
-                    }
-                }
-            }
-        )
+Scheduler = Literal["euler","euler_k","lms","ddim","ddpm","deis","pndm","heun","dpm_2","dpm_2_a","dpmpp_2s","dpmpp_2m","dpmpp_2m_k","dpmpp_sde","dpmpp_sde_k","unipc","lcm"]
+
+
+def _view_url(image_name: str) -> str:
+    return urljoin(INVOKEAI_BASE_URL, f"/api/v1/images/i/{image_name}/full")
+
+
+async def _run_graph(graph: dict) -> tuple[str, Optional[str]]:
+    """Enqueue a graph, wait for it and return (batch_id, output image name)."""
+    result = await enqueue_graph(graph)
+    batch_id = result["batch"]["batch_id"]
+    logger.info(f"Enqueued batch {batch_id}, waiting for completion...")
+    completed = await wait_for_completion(batch_id)
+    for output in completed.get("result", {}).get("outputs", {}).values():
+        if output.get("type") == "image_output":
+            return batch_id, output["image"]["image_name"]
+    return batch_id, None
+
+
+async def _resolve_image(image_path: str) -> str:
+    """Upload a local file, or pass through an existing InvokeAI image_name."""
+    if "/" in image_path or "\\" in image_path:
+        logger.info(f"Uploading image from: {image_path}")
+        return await upload_image(image_path)
+    return image_path
+
+
+@mcp.tool(
+    title="Get Queue Status",
+    description="Get the status of the InvokeAI processing queue.",
+    annotations=READ_ONLY_ANNOTATIONS,
+)
+async def get_queue_status(
+    queue_id: Annotated[str, Field(description="Queue identifier")] = DEFAULT_QUEUE_ID,
+) -> str:
+    response = await get_client().get(f"/api/v1/queue/{queue_id}/status")
+    response.raise_for_status()
+    return f"Queue Status:\n\n{json.dumps(response.json(), indent=2)}"
+
+
+@mcp.tool(
+    name="list_models",
+    title="List Models",
+    description="List available AI models in InvokeAI.",
+    annotations=READ_ONLY_ANNOTATIONS,
+)
+async def list_models_tool(
+    model_type: Annotated[
+        Literal["main", "vae", "lora", "controlnet", "embedding", "spandrel_image_to_image"],
+        Field(description="Type of models to list"),
+    ] = "main",
+) -> str:
+    models = await list_models(model_type)
+    lines = [
+        f"- {m.get('name', 'Unknown')} (key: {m.get('key', 'unknown')}, base: {m.get('base', 'unknown')})"
+        for m in models
     ]
+    return f"Available {model_type} models:\n\n" + "\n".join(lines)
 
 
-@app.call_tool()
-async def call_tool(name: str, arguments: Any) -> list[TextContent | ImageContent | EmbeddedResource]:
-    """Handle tool calls."""
-    try:
-        if name == "generate_image":
-            # Extract parameters
-            prompt = arguments["prompt"]
-            negative_prompt = arguments.get("negative_prompt", "")
-            width = arguments.get("width", 512)
-            height = arguments.get("height", 512)
-            steps = arguments.get("steps", 30)
-            cfg_scale = arguments.get("cfg_scale", 7.5)
-            scheduler = arguments.get("scheduler", "euler")
-            seed = arguments.get("seed")
-            model_key = arguments.get("model_key")
-            lora_key = arguments.get("lora_key")
-            lora_weight = arguments.get("lora_weight", 1.0)
-            vae_key = arguments.get("vae_key")
-
-            logger.info(f"Generating image with prompt: {prompt[:50]}...")
-
-            # Create graph
-            graph = await create_text2img_graph(
-                prompt=prompt,
-                negative_prompt=negative_prompt,
-                model_key=model_key,
-                lora_key=lora_key,
-                lora_weight=lora_weight,
-                vae_key=vae_key,
-                width=width,
-                height=height,
-                steps=steps,
-                cfg_scale=cfg_scale,
-                scheduler=scheduler,
-                seed=seed
-            )
-
-            # Enqueue and wait for completion
-            result = await enqueue_graph(graph)
-            batch_id = result["batch"]["batch_id"]
-
-            logger.info(f"Enqueued batch {batch_id}, waiting for completion...")
-
-            completed = await wait_for_completion(batch_id)
-
-            # Extract image name from result
-            if "result" in completed and "outputs" in completed["result"]:
-                outputs = completed["result"]["outputs"]
-                # Find the image output
-                for node_id, output in outputs.items():
-                    if output.get("type") == "image_output":
-                        image_name = output["image"]["image_name"]
-                        image_url = await get_image_url(image_name)
-
-                        return [
-                            TextContent(
-                                type="text",
-                                text=f"Image generated successfully!\n\nImage Name: {image_name}\nImage URL: {image_url}\n\nYou can view the image at: {urljoin(INVOKEAI_BASE_URL, f'/api/v1/images/i/{image_name}/full')}"
-                            )
-                        ]
-
-            # Fallback if we couldn't find image output
-            return [
-                TextContent(
-                    type="text",
-                    text=f"Image generation completed but output format was unexpected. Batch ID: {batch_id}\n\nResult: {json.dumps(completed, indent=2)}"
-                )
-            ]
-
-        elif name == "img2img":
-            # Extract parameters
-            image_path = arguments["image_path"]
-            prompt = arguments["prompt"]
-            negative_prompt = arguments.get("negative_prompt", "")
-            strength = arguments.get("strength", 0.75)
-            steps = arguments.get("steps", 30)
-            cfg_scale = arguments.get("cfg_scale", 7.5)
-            scheduler = arguments.get("scheduler", "euler")
-            seed = arguments.get("seed")
-            model_key = arguments.get("model_key")
-            lora_key = arguments.get("lora_key")
-            lora_weight = arguments.get("lora_weight", 1.0)
-            vae_key = arguments.get("vae_key")
-
-            logger.info(f"Img2img transformation with prompt: {prompt[:50]}...")
-
-            # Upload image if it's a file path, otherwise assume it's an image_name
-            if "/" in image_path or "\\" in image_path:
-                logger.info(f"Uploading image from: {image_path}")
-                image_name = await upload_image(image_path)
-            else:
-                image_name = image_path
-
-            # Create graph
-            graph = await create_img2img_graph(
-                image_name=image_name,
-                prompt=prompt,
-                negative_prompt=negative_prompt,
-                strength=strength,
-                model_key=model_key,
-                lora_key=lora_key,
-                lora_weight=lora_weight,
-                vae_key=vae_key,
-                steps=steps,
-                cfg_scale=cfg_scale,
-                scheduler=scheduler,
-                seed=seed
-            )
-
-            # Enqueue and wait for completion
-            result = await enqueue_graph(graph)
-            batch_id = result["batch"]["batch_id"]
-
-            logger.info(f"Enqueued batch {batch_id}, waiting for completion...")
-
-            completed = await wait_for_completion(batch_id)
-
-            # Extract image name from result
-            if "result" in completed and "outputs" in completed["result"]:
-                outputs = completed["result"]["outputs"]
-                for node_id, output in outputs.items():
-                    if output.get("type") == "image_output":
-                        result_image_name = output["image"]["image_name"]
-                        image_url = await get_image_url(result_image_name)
-
-                        return [
-                            TextContent(
-                                type="text",
-                                text=f"Image transformation completed!\n\nOriginal: {image_name}\nResult: {result_image_name}\nStrength: {strength}\n\nImage URL: {image_url}\n\nView at: {urljoin(INVOKEAI_BASE_URL, f'/api/v1/images/i/{result_image_name}/full')}"
-                            )
-                        ]
-
-            # Fallback
-            return [
-                TextContent(
-                    type="text",
-                    text=f"Image transformation completed but output format was unexpected. Batch ID: {batch_id}"
-                )
-            ]
-
-        elif name == "upscale_image":
-            # Extract parameters
-            image_path = arguments["image_path"]
-            model_key = arguments.get("model_key")
-
-            logger.info(f"Upscaling image: {image_path}")
-
-            # Upload image if it's a file path, otherwise assume it's an image_name
-            if "/" in image_path or "\\" in image_path:
-                logger.info(f"Uploading image from: {image_path}")
-                image_name = await upload_image(image_path)
-            else:
-                image_name = image_path
-
-            # Upscale the image
-            upscaled_image_name = await upscale_image(image_name, model_key)
-            image_url = await get_image_url(upscaled_image_name)
-
-            return [
-                TextContent(
-                    type="text",
-                    text=f"Image upscaled successfully!\n\nOriginal: {image_name}\nUpscaled: {upscaled_image_name}\n\nImage URL: {image_url}\n\nView at: {urljoin(INVOKEAI_BASE_URL, f'/api/v1/images/i/{upscaled_image_name}/full')}"
-                )
-            ]
-
-        elif name == "list_models":
-            model_type = arguments.get("model_type", "main")
-            models = await list_models(model_type)
-
-            # Format model list
-            model_list = []
-            for model in models:
-                model_key = model.get("key", "unknown")
-                model_name = model.get("name", "Unknown")
-                model_base = model.get("base", "unknown")
-                model_list.append(f"- {model_name} (key: {model_key}, base: {model_base})")
-
-            return [
-                TextContent(
-                    type="text",
-                    text=f"Available {model_type} models:\n\n" + "\n".join(model_list)
-                )
-            ]
-
-        elif name == "get_queue_status":
-            queue_id = arguments.get("queue_id", DEFAULT_QUEUE_ID)
-            client = get_client()
-
-            response = await client.get(f"/api/v1/queue/{queue_id}/status")
-            response.raise_for_status()
-            status = response.json()
-
-            return [
-                TextContent(
-                    type="text",
-                    text=f"Queue Status:\n\n{json.dumps(status, indent=2)}"
-                )
-            ]
-
-        else:
-            return [
-                TextContent(
-                    type="text",
-                    text=f"Unknown tool: {name}"
-                )
-            ]
-
-    except Exception as e:
-        logger.error(f"Error in tool {name}: {e}", exc_info=True)
-        return [
-            TextContent(
-                type="text",
-                text=f"Error: {str(e)}"
-            )
-        ]
+async def generate_image(
+    prompt: Annotated[str, Field(description="The text prompt describing the image to generate")],
+    negative_prompt: Annotated[str, Field(description="Negative prompt (things to avoid in the image)")] = "",
+    width: Annotated[int, Field(description="Image width in pixels", ge=64, le=2048)] = 512,
+    height: Annotated[int, Field(description="Image height in pixels", ge=64, le=2048)] = 512,
+    steps: Annotated[int, Field(description="Number of denoising steps", ge=1, le=150)] = 30,
+    cfg_scale: Annotated[float, Field(description="Classifier-free guidance scale", ge=1.0, le=20.0)] = 7.5,
+    scheduler: Annotated[Scheduler, Field(description="Sampling scheduler")] = "euler",
+    seed: Annotated[Optional[int], Field(description="Random seed for reproducibility (optional)")] = None,
+    model_key: Annotated[Optional[str], Field(description="Model identifier (optional, uses default if not specified)")] = None,
+    lora_key: Annotated[Optional[str], Field(description="LoRA model identifier (optional, for fine-tuned style control)")] = None,
+    lora_weight: Annotated[float, Field(description="LoRA weight/strength", ge=0.0, le=2.0)] = 1.0,
+    vae_key: Annotated[Optional[str], Field(description="VAE model identifier (optional, overrides model's built-in VAE)")] = None,
+) -> str:
+    logger.info(f"Generating image with prompt: {prompt[:50]}...")
+    graph = await create_text2img_graph(
+        prompt=prompt, negative_prompt=negative_prompt, model_key=model_key,
+        lora_key=lora_key, lora_weight=lora_weight, vae_key=vae_key,
+        width=width, height=height, steps=steps, cfg_scale=cfg_scale,
+        scheduler=scheduler, seed=seed,
+    )
+    batch_id, image_name = await _run_graph(graph)
+    if image_name is None:
+        return f"Image generation completed but output format was unexpected. Batch ID: {batch_id}"
+    image_url = await get_image_url(image_name)
+    return (
+        f"Image generated successfully!\n\nImage Name: {image_name}\nImage URL: {image_url}\n\n"
+        f"You can view the image at: {_view_url(image_name)}"
+    )
 
 
-async def main():
-    """Run the MCP server."""
-    async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
-        await app.run(
-            read_stream,
-            write_stream,
-            app.create_initialization_options()
-        )
+async def img2img(
+    image_path: Annotated[str, Field(description="Path to the source image file to transform, OR image_name from a previous generation")],
+    prompt: Annotated[str, Field(description="The text prompt describing the desired transformation")],
+    negative_prompt: Annotated[str, Field(description="Negative prompt (things to avoid)")] = "",
+    strength: Annotated[float, Field(description="How much to transform the image (0.0-1.0). Higher = more changes. Typical: 0.6-0.8", ge=0.0, le=1.0)] = 0.75,
+    steps: Annotated[int, Field(description="Number of denoising steps", ge=1, le=150)] = 30,
+    cfg_scale: Annotated[float, Field(description="Classifier-free guidance scale", ge=1.0, le=20.0)] = 7.5,
+    scheduler: Annotated[Scheduler, Field(description="Sampling scheduler")] = "euler",
+    seed: Annotated[Optional[int], Field(description="Random seed for reproducibility (optional)")] = None,
+    model_key: Annotated[Optional[str], Field(description="Model identifier (optional, uses default if not specified)")] = None,
+    lora_key: Annotated[Optional[str], Field(description="LoRA model identifier (optional, for fine-tuned style control)")] = None,
+    lora_weight: Annotated[float, Field(description="LoRA weight/strength", ge=0.0, le=2.0)] = 1.0,
+    vae_key: Annotated[Optional[str], Field(description="VAE model identifier (optional, overrides model's built-in VAE)")] = None,
+) -> str:
+    logger.info(f"Img2img transformation with prompt: {prompt[:50]}...")
+    image_name = await _resolve_image(image_path)
+    graph = await create_img2img_graph(
+        image_name=image_name, prompt=prompt, negative_prompt=negative_prompt,
+        strength=strength, model_key=model_key, lora_key=lora_key,
+        lora_weight=lora_weight, vae_key=vae_key, steps=steps,
+        cfg_scale=cfg_scale, scheduler=scheduler, seed=seed,
+    )
+    batch_id, result_name = await _run_graph(graph)
+    if result_name is None:
+        return f"Image transformation completed but output format was unexpected. Batch ID: {batch_id}"
+    image_url = await get_image_url(result_name)
+    return (
+        f"Image transformation completed!\n\nOriginal: {image_name}\nResult: {result_name}\n"
+        f"Strength: {strength}\n\nImage URL: {image_url}\n\nView at: {_view_url(result_name)}"
+    )
+
+
+async def upscale_image_tool(
+    image_path: Annotated[str, Field(description="Path to the image file to upscale, OR image_name from a previous generation")],
+    model_key: Annotated[Optional[str], Field(description="Upscaling model key to use (optional, uses default if not specified)")] = None,
+) -> str:
+    logger.info(f"Upscaling image: {image_path}")
+    image_name = await _resolve_image(image_path)
+    upscaled = await upscale_image(image_name, model_key)
+    image_url = await get_image_url(upscaled)
+    return (
+        f"Image upscaled successfully!\n\nOriginal: {image_name}\nUpscaled: {upscaled}\n\n"
+        f"Image URL: {image_url}\n\nView at: {_view_url(upscaled)}"
+    )
+
+
+if not READ_ONLY:
+    mcp.tool(
+        name="generate_image", title="Generate Image",
+        description="Generate an image from a text prompt using InvokeAI (enqueues a job and creates a new image). Returns the generated image URL.",
+        annotations=CREATE_ANNOTATIONS,
+    )(generate_image)
+    mcp.tool(
+        name="img2img", title="Image to Image",
+        description="Transform an existing image using a text prompt (image-to-image generation). Creates a new image; useful for refining, modifying, or stylizing existing images.",
+        annotations=CREATE_ANNOTATIONS,
+    )(img2img)
+    mcp.tool(
+        name="upscale_image", title="Upscale Image",
+        description="Upscale an image to higher resolution using AI upscaling (typically 2x-4x). Creates a new image.",
+        annotations=CREATE_ANNOTATIONS,
+    )(upscale_image_tool)
+
+def main() -> None:
+    """Run the MCP server over stdio."""
+    mcp.run(transport="stdio")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

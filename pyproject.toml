@@ -7,7 +7,7 @@ name = "invokeai-mcp-server"
 version = "1.0.1"
 description = "A Model Context Protocol server for InvokeAI image generation"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
     {name = "CoinsTax LLC", email = "support@coinstax.com"}
@@ -46,7 +46,9 @@ classifiers = [
 ]
 dependencies = [
     "httpx>=0.24.0",
-    "mcp>=0.1.0",
+    "mcp>=2.0.0",
+    "fastmcp>=4.0.0b3",
+    "pydantic>=2",
 ]
 
 [project.urls]

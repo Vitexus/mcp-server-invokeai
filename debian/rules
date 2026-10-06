@@ -1,0 +1,16 @@
+#!/usr/bin/make -f
+
+export PYBUILD_NAME=invokeai_mcp_server
+
+%:
+	dh $@ --with python3 --buildsystem=pybuild
+
+override_dh_auto_install:
+	dh_auto_install --destdir=debian/mcp-server-invokeai
+	install -D -m 0755 debian/mcp-server-invokeai.sh debian/mcp-server-invokeai/usr/bin/mcp-server-invokeai
+	# upstream console script calls async main() without a loop; use our launcher
+	ln -sf mcp-server-invokeai debian/mcp-server-invokeai/usr/bin/invokeai-mcp-server
+
+override_dh_auto_test:
+	# Not run at build time: python3-mcp / python3-httpx are not guaranteed
+	# in the build chroot. See debian/tests/control (autopkgtest).

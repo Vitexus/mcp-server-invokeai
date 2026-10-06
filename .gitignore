@@ -53,3 +53,12 @@ TESTING_*.md
 # MCP config (user-specific)
 mcp_config.json
 DEVELOPMENT_STATUS.md
+.pybuild/
+debian/.debhelper/
+debian/*.debhelper.log
+debian/*.substvars
+debian/debhelper-build-stamp
+debian/files
+debian/mcp-server-invokeai/
+debian/mcprack-mcp-server-invokeai/
+debian/*.debhelper

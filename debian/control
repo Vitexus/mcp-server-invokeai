@@ -1,0 +1,33 @@
+Source: mcp-server-invokeai
+Section: python
+Priority: optional
+Maintainer: Vítězslav Dvořák <info@vitexsoftware.cz>
+Build-Depends: debhelper-compat (= 13), dh-python, pybuild-plugin-pyproject, python3-all, python3-setuptools
+Standards-Version: 4.6.2
+Homepage: https://github.com/coinstax/invokeai-mcp-server
+Vcs-Git: https://github.com/Vitexus/mcp-server-invokeai.git
+Vcs-Browser: https://github.com/Vitexus/mcp-server-invokeai
+
+Package: mcp-server-invokeai
+Architecture: all
+Depends: ${misc:Depends}, ${python3:Depends},
+ python3-mcp (>= 1:2.0.0),
+ python3-fastmcp (>= 4.0.0~b3),
+ python3-pydantic (>= 2),
+ python3-httpx (>= 0.24.0),
+Provides: invokeai-mcp-server, python3-invokeai-mcp-server
+Description: MCP server for InvokeAI image generation
+ Model Context Protocol (MCP) server that lets AI agents such as Claude
+ Desktop and Claude Code generate images through a running InvokeAI
+ instance: text-to-image, img2img, upscaling, model listing and queue
+ status. Talks to InvokeAI over its REST API (default 127.0.0.1:9090).
+
+Package: mcprack-mcp-server-invokeai
+Architecture: all
+Depends: ${misc:Depends},
+ mcprack (>= 1.5.4),
+ mcp-server-invokeai (= ${binary:Version}),
+Description: Registers InvokeAI MCP server into mcprack catalog
+ Companion package for mcp-server-invokeai. Installing it registers
+ the mcp-server-invokeai binary as an available MCP server in the local
+ mcprack instance; removing it unregisters it again.
