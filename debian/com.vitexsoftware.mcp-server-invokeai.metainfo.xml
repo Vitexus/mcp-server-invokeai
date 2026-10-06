@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="console-application">
+  <id>com.vitexsoftware.mcp-server-invokeai</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>InvokeAI MCP Server</name>
+  <summary>MCP server for InvokeAI image generation</summary>
+  <description>
+    <p>Model Context Protocol server that lets AI agents generate, transform and upscale images through a running InvokeAI instance.</p>
+  </description>
+  <url type="homepage">https://github.com/coinstax/invokeai-mcp-server</url>
+  <provides>
+    <binary>mcp-server-invokeai</binary>
+  </provides>
+  <releases>
+    <release version="1.0.1" date="2026-10-06"/>
+  </releases>
+</component>

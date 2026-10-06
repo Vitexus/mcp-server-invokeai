@@ -204,6 +204,28 @@ Check InvokeAI processing queue status.
 **Parameters:**
 - `queue_id` (string, optional, default: "default"): Queue identifier
 
+## Debian / Ubuntu package
+
+```bash
+sudo apt install mcp-server-invokeai            # server, binary: /usr/bin/mcp-server-invokeai
+sudo apt install mcprack-mcp-server-invokeai    # optional: registers it in the local mcprack catalog
+```
+
+Environment variables (none are secrets):
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `INVOKEAI_BASE_URL` | `http://127.0.0.1:9090` | InvokeAI REST API |
+| `INVOKEAI_READ_ONLY` | unset | `true` registers only the read-only tools (no image creation) |
+| `INVOKEAI_UPLOAD_ROOT` | `$HOME` and the temp dir | Directories (`:`-separated) from which `img2img`/`upscale_image` may read local files |
+
+Tool annotation classes:
+
+| Tool | Class |
+|---|---|
+| `list_models`, `get_queue_status` | read-only |
+| `generate_image`, `img2img`, `upscale_image` | create (not idempotent; creates new images) |
+
 ## Model Requirements
 
 ### VRAM Requirements

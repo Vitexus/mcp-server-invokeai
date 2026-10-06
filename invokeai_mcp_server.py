@@ -8,6 +8,8 @@ import asyncio
 import json
 import logging
 import os
+import tempfile
+from pathlib import Path
 from typing import Annotated, Any, Literal, Optional
 from urllib.parse import urljoin
 
@@ -24,6 +26,8 @@ logger = logging.getLogger("invokeai-mcp")
 INVOKEAI_BASE_URL = os.environ.get("INVOKEAI_BASE_URL", "http://127.0.0.1:9090")
 READ_ONLY = os.environ.get("INVOKEAI_READ_ONLY", "").lower() in ("1", "true", "yes")
 DEFAULT_QUEUE_ID = "default"
+ALLOWED_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 
 # Initialize MCP server
 mcp = FastMCP("invokeai")
@@ -134,13 +138,32 @@ async def get_image_url(image_name: str) -> str:
     return data.get("image_url", "")
 
 
+def _upload_roots() -> list:
+    """Directories uploads may be read from (INVOKEAI_UPLOAD_ROOT, os.pathsep-separated)."""
+    raw = os.environ.get("INVOKEAI_UPLOAD_ROOT")
+    if raw:
+        return [Path(r).resolve() for r in raw.split(os.pathsep) if r]
+    return [Path.home().resolve(), Path(tempfile.gettempdir()).resolve()]
+
+
+def _safe_upload_path(image_path: str) -> Path:
+    """Resolve symlinks and confine the path to the allowed roots and image types."""
+    path = Path(image_path).expanduser().resolve()
+    if not any(path.is_relative_to(root) for root in _upload_roots()):
+        raise ValueError("Image path is outside the allowed upload directories (see INVOKEAI_UPLOAD_ROOT)")
+    if path.suffix.lower() not in ALLOWED_IMAGE_SUFFIXES:
+        raise ValueError(f"Unsupported image type: {path.suffix or '(none)'}")
+    if not path.is_file():
+        raise ValueError(f"Image file not found: {path.name}")
+    if path.stat().st_size > MAX_UPLOAD_BYTES:
+        raise ValueError("Image file is too large to upload")
+    return path
+
+
 async def upload_image(image_path: str) -> str:
     """Upload an image file and return its image_name."""
-    import os
     client = get_client()
-
-    if not os.path.exists(image_path):
-        raise ValueError(f"Image file not found: {image_path}")
+    image_path = str(_safe_upload_path(image_path))
 
     with open(image_path, 'rb') as f:
         files = {'file': (os.path.basename(image_path), f, 'image/png')}

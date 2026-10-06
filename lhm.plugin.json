@@ -1,0 +1,12 @@
+{
+  "author": "CyberVitexus",
+  "authorUrl": "https://github.com/Vitexus",
+  "category": "media",
+  "description": "MCP server for InvokeAI image generation: text-to-image, img2img, upscaling, model listing and queue status.",
+  "homepage": "https://github.com/Vitexus/mcp-server-invokeai",
+  "identifier": "vitexsoftware-mcp-server-invokeai",
+  "name": "InvokeAI MCP Server",
+  "prompts": [],
+  "tags": ["mcp", "invokeai", "stable-diffusion", "image-generation"],
+  "version": "1.0.1"
+}

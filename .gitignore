@@ -62,3 +62,4 @@ debian/files
 debian/mcp-server-invokeai/
 debian/mcprack-mcp-server-invokeai/
 debian/*.debhelper
+__pycache__/
