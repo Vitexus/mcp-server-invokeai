@@ -47,7 +47,7 @@ classifiers = [
 dependencies = [
     "httpx>=0.24.0",
     "mcp>=2.0.0b2",
-    "fastmcp>=4.0.0b3",
+    "fastmcp>=4.1.4",
     "pydantic>=2",
 ]
 
