@@ -2,3 +2,6 @@
 set -e
 mcp-server-invokeai --version
 python3 -m pytest tests/ -q
+
+# MCP-level smoke via the mcprack CLI: handshake + tools/resources/prompts list
+mcprack server probe /usr/bin/mcp-server-invokeai --set-env INVOKEAI_READ_ONLY=true

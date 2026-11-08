@@ -25,7 +25,7 @@ Description: MCP server for InvokeAI image generation
 Package: mcprack-mcp-server-invokeai
 Architecture: all
 Depends: ${misc:Depends},
- mcprack (>= 1.5.4),
+ mcprack (>= 1.6.0),
  mcp-server-invokeai (= ${binary:Version}),
 Description: Registers InvokeAI MCP server into mcprack catalog
  Companion package for mcp-server-invokeai. Installing it registers
